@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 )
-
-var testboard [][]uint8
 
 const Unk uint8 = 0
 
-//TODO : convert '_' in input to Unk
+type SudokuError interface {
+	Error() string
+	Code() int
+}
 
 type InvalidBoard string
 type CannotSolveBoardError string
@@ -17,8 +22,16 @@ func (i InvalidBoard) Error() string {
 	return "invalid board"
 }
 
+func (i InvalidBoard) Code() int {
+	return 10
+}
+
 func (c CannotSolveBoardError) Error() string {
 	return "cannot solve board"
+}
+
+func (i CannotSolveBoardError) Code() int {
+	return 11
 }
 
 type Board struct {
@@ -120,7 +133,7 @@ func (b *Board) validPods() bool {
 }
 
 // recursive approach to solving this board
-func SolveIt(b Board) (Board, error) {
+func SolveIt(b Board) (Board, SudokuError) {
 	s := b.Solved()
 	v := b.Valid()
 
@@ -218,30 +231,73 @@ func validSet(r []uint8) bool {
 	return true
 }
 
-func main() {
-	// TODO: get user input
+// returns a valid sudoku board
+// returns an error if user input fails to parse to a valid board
+// ANY rune which is not a positive integer will be set interpreted as Unk
+func GetBoardFromInput() (*Board, SudokuError) {
+	ans := new(Board)
+	ans.vals = [][]uint8{}
 
-//	fmt.Println()
+	reader := bufio.NewReader(os.Stdin)
 
-	validboard := [][]uint8{{1, 2, 3, 4, 5, 6, 7, 8, 9}, {4, 5, 6, 7, 8, 9, 1, 2, 3}, {7, 8, 9, 1, 2, 3, 4, 5, 6}, {2, 3, 4, 5, 6, 7, 8, 9, 1}, {5, 6, 7, 8, 9, 1, 2, 3, 4}, {8, 9, 1, 2, 3, 4, 5, 6, 7}, {3, 4, 5, 6, 7, 8, 9, 1, 2}, {6, 7, 8, 9, 1, 2, 3, 4, 5}, {9, 1, 2, 3, 4, 5, 6, 7, 8}}
+	line_width := -1
+	input_lines := 0
+	for line_width != input_lines {
+		line, _ := reader.ReadString('\n')
 
-	v := new(Board)
-	v.vals = validboard
+		// remove leading and trailing spaces/newlines
+		digits := strings.Split(strings.TrimSpace(line), " ")
 
-	testboard := [][]uint8{{Unk, Unk, 3, Unk, Unk, 6, Unk, 8, Unk}, {Unk, 5, Unk, Unk, 8, Unk, 1, 2, Unk}, {7, Unk, 9, 1, Unk, 3, Unk, 5, 6}, {Unk, 3, Unk, Unk, 6, 7, Unk, 9, Unk}, {5, Unk, 7, 8, Unk, Unk, Unk, 3, Unk}, {8, Unk, 1, Unk, 3, Unk, 5, Unk, 7}, {Unk, 4, Unk, Unk, 7, 8, Unk, 1, Unk}, {6, Unk, 8, Unk, Unk, 2, Unk, 4, Unk}, {Unk, 1, 2, Unk, 4, 5, Unk, 7, 8}}
-	t := new(Board)
-	t.vals = testboard
+		if line_width == -1 { // first time through, set width
+			line_width = len(digits)
+		}
 
-//	fmt.Println("Started with:")
-//	fmt.Println(t.String())
+		// subsequent inputs lines must equal the length as the first line
+		// if not, return InvalidBoard
+		if len(digits) != line_width {
+			return &Board{}, new(InvalidBoard)
+		}
 
-	b, e := SolveIt(*t)
-	if e != nil {
-		fmt.Println(e)
-		return
+		var digit int
+		var err error
+
+		ints := []uint8{}
+		for i := range digits {
+			// attempt to convert to integers
+			digit, err = strconv.Atoi(digits[i])
+
+			if err != nil {
+				// it's not an integer, so make it Unk
+				digit = int(Unk)
+			}
+
+			// cannot be a negative number
+			if digit < 0 {
+				digit = int(Unk)
+			}
+
+			ints = append(ints, uint8(digit))
+		}
+
+		ans.vals = append(ans.vals, ints)
+		input_lines += 1
 	}
 
-//	fmt.Println("Solved!")
-	fmt.Print(b.String())
+	return ans, nil
+}
 
+func main() {
+	b, e := GetBoardFromInput()
+	if e != nil {
+		fmt.Println(e)
+		os.Exit(e.Code())
+	}
+
+	solvedBoard, e := SolveIt(*b)
+	if e != nil {
+		fmt.Println(e)
+		os.Exit(e.Code())
+	}
+
+	fmt.Print(solvedBoard.String())
 }
